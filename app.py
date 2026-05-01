@@ -261,7 +261,7 @@ def get_player_info(target_uid, token, server_name=None):
             'Expect': "100-continue",
             'X-Unity-Version': "2018.4.11f1",
             'X-GA': "v1 1",
-            'ReleaseVersion': "OB52"
+            'ReleaseVersion': "OB53"
         }
 
         response = requests.post(endpoint, data=bytes.fromhex(encrypted_data), headers=headers, verify=False)
@@ -386,7 +386,7 @@ def send_friend_request_with_retry(author_uid, target_uid, token, server_name=No
             "Authorization": f"Bearer {token}",
             "X-Unity-Version": "2018.4.11f1",
             "X-GA": "v1 1",
-            "ReleaseVersion": "OB52",
+            "ReleaseVersion": "OB53",
             "Content-Type": "application/x-www-form-urlencoded",
             "User-Agent": "Dalvik/2.1.0 (Linux; Android 9)"
         }
