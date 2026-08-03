@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import jwt
 import requests
+from requests.adapters import HTTPAdapter
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 import RemoveFriend_Req_pb2
@@ -26,6 +27,20 @@ warnings.filterwarnings("ignore", category=UserWarning, message="Unverified HTTP
 app = Flask(__name__)
 
 # -----------------------------
+# Requests Session (connection pooling)
+# -----------------------------
+SESSION = requests.Session()
+# Keep urllib3 from using env proxies and use our settings
+SESSION.trust_env = False
+SESSION.verify = False
+# Increase pool size for concurrency and reuse
+adapter = HTTPAdapter(pool_connections=100, pool_maxsize=100)
+SESSION.mount('https://', adapter)
+SESSION.mount('http://', adapter)
+# Default timeout
+DEFAULT_TIMEOUT = 10
+
+# -----------------------------
 # AES Configuration
 # -----------------------------
 AES_KEY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
@@ -36,9 +51,10 @@ def encrypt_message(data_bytes):
     return cipher.encrypt(pad(data_bytes, AES.block_size))
 
 def encrypt_message_hex(data_bytes):
+    """Return encrypted bytes (was hex string previously)."""
     cipher = AES.new(AES_KEY, AES.MODE_CBC, AES_IV)
     encrypted = cipher.encrypt(pad(data_bytes, AES.block_size))
-    return binascii.hexlify(encrypted).decode('utf-8')
+    return encrypted
 
 # -----------------------------
 # Region-based URL Configuration
@@ -78,10 +94,10 @@ def retry_operation(max_retries=10, delay=1):
                 except Exception as e:
                     last_exception = e
                     print(f"Attempt {attempt + 1}/{max_retries} failed with error: {str(e)}")
-                
+
                 if attempt < max_retries - 1:
                     time.sleep(delay)
-            
+
             # Agar 10 baar mein bhi fail hua toh last error return karo
             if last_exception:
                 return {
@@ -118,7 +134,7 @@ def get_token_from_uid_password(uid, password):
             'Accept-Encoding': "gzip"
         }
 
-        oauth_response = requests.post(oauth_url, data=payload, headers=headers, timeout=10, verify=False)
+        oauth_response = SESSION.post(oauth_url, data=payload, headers=headers, timeout=DEFAULT_TIMEOUT)
         oauth_response.raise_for_status()
         
         oauth_data = oauth_response.json()
@@ -175,8 +191,8 @@ def try_platform_login(open_id, access_token, platform_type):
         game_data.field_100 = str(platform_type)
 
         serialized_data = game_data.SerializeToString()
+        # encrypt_message returns bytes already
         encrypted_data = encrypt_message(serialized_data)
-        hex_encrypted_data = binascii.hexlify(encrypted_data).decode('utf-8')
 
         url = "https://loginbp.ggblueshark.com/MajorLogin"
         headers = {
@@ -190,9 +206,8 @@ def try_platform_login(open_id, access_token, platform_type):
             "ReleaseVersion": "OB54"
         }
         
-        edata = bytes.fromhex(hex_encrypted_data)
-
-        response = requests.post(url, data=edata, headers=headers, timeout=10, verify=False)
+        # send raw encrypted bytes directly (avoid redundant hex conversions)
+        response = SESSION.post(url, data=encrypted_data, headers=headers, timeout=DEFAULT_TIMEOUT)
         response.raise_for_status()
 
         if response.status_code == 200:
@@ -204,7 +219,7 @@ def try_platform_login(open_id, access_token, platform_type):
                 data_dict = {field.name: getattr(example_msg, field.name)
                              for field in example_msg.DESCRIPTOR.fields
                              if field.name not in ["binary", "binary_data", "Garena420"]}
-            except Exception as e:
+            except Exception:
                 try:
                     data_dict = response.json()
                 except ValueError:
@@ -249,7 +264,8 @@ def get_player_info(target_uid, token, server_name=None):
             server_name = get_server_from_token(token)
             
         protobuf_data = create_info_protobuf(target_uid)
-        encrypted_data = encrypt_message_hex(protobuf_data)
+        # encrypt_message_hex now returns bytes directly
+        encrypted_bytes = encrypt_message_hex(protobuf_data)
         endpoint = get_base_url(server_name) + "GetPlayerPersonalShow"
 
         headers = {
@@ -264,13 +280,13 @@ def get_player_info(target_uid, token, server_name=None):
             'ReleaseVersion': "OB54"
         }
 
-        response = requests.post(endpoint, data=bytes.fromhex(encrypted_data), headers=headers, verify=False)
+        response = SESSION.post(endpoint, data=encrypted_bytes, headers=headers, timeout=DEFAULT_TIMEOUT)
         
         if response.status_code != 200:
             return None
 
-        hex_response = response.content.hex()
-        binary = bytes.fromhex(hex_response)
+        # response.content is already bytes; avoid redundant conversions
+        binary = response.content
         
         info = data_pb2.AccountPersonalShowInfo()
         info.ParseFromString(binary)
@@ -333,7 +349,7 @@ def remove_friend_with_retry(author_uid, target_uid, token, server_name=None):
             'ReleaseVersion': "OB54"
         }
 
-        res = requests.post(url, data=encrypted_bytes, headers=headers, verify=False)
+        res = SESSION.post(url, data=encrypted_bytes, headers=headers, timeout=DEFAULT_TIMEOUT)
         
         # Extract player info
         player_data = None
@@ -391,7 +407,7 @@ def send_friend_request_with_retry(author_uid, target_uid, token, server_name=No
             "User-Agent": "Dalvik/2.1.0 (Linux; Android 9)"
         }
 
-        r = requests.post(url, headers=headers, data=bytes.fromhex(encrypted_payload), verify=False)
+        r = SESSION.post(url, headers=headers, data=bytes.fromhex(encrypted_payload), timeout=DEFAULT_TIMEOUT)
         
         # Extract player info
         player_data = None
@@ -603,6 +619,7 @@ if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
     print(f"[🚀] Starting {__name__.upper()} on port {port} ...")
     try:
+        import asyncio
         asyncio.run(startup())
     except Exception as e:
         print(f"[⚠️] Startup warning: {e} — continuing without full initialization")
