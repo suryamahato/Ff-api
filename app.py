@@ -203,7 +203,7 @@ def try_platform_login(open_id, access_token, platform_type):
             "Expect": "100-continue",
             "X-Unity-Version": "2018.4.11f1",
             "X-GA": "v1 1",
-            "ReleaseVersion": "OB54"
+            "ReleaseVersion": "OB55"
         }
         
         # send raw encrypted bytes directly (avoid redundant hex conversions)
@@ -277,7 +277,7 @@ def get_player_info(target_uid, token, server_name=None):
             'Expect': "100-continue",
             'X-Unity-Version': "2018.4.11f1",
             'X-GA': "v1 1",
-            'ReleaseVersion': "OB54"
+            'ReleaseVersion': "OB55"
         }
 
         response = SESSION.post(endpoint, data=encrypted_bytes, headers=headers, timeout=DEFAULT_TIMEOUT)
@@ -346,7 +346,7 @@ def remove_friend_with_retry(author_uid, target_uid, token, server_name=None):
             'Content-Type': "application/x-www-form-urlencoded",
             'X-Unity-Version': "2018.4.11f1",
             'X-GA': "v1 1",
-            'ReleaseVersion': "OB54"
+            'ReleaseVersion': "OB55"
         }
 
         res = SESSION.post(url, data=encrypted_bytes, headers=headers, timeout=DEFAULT_TIMEOUT)
@@ -402,7 +402,7 @@ def send_friend_request_with_retry(author_uid, target_uid, token, server_name=No
             "Authorization": f"Bearer {token}",
             "X-Unity-Version": "2018.4.11f1",
             "X-GA": "v1 1",
-            "ReleaseVersion": "OB54",
+            "ReleaseVersion": "OB55",
             "Content-Type": "application/x-www-form-urlencoded",
             "User-Agent": "Dalvik/2.1.0 (Linux; Android 9)"
         }
